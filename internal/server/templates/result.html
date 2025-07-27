@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web Page Dashboard</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #eef2f7;
+      }
+
+      .dashboard-header {
+        background: linear-gradient(to right, #667eea, #764ba2);
+        color: white;
+        padding: 24px 20px;
+        border-radius: 0.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .dashboard-header h2 {
+        font-size: 2rem;
+        font-weight: bold;
+      }
+
+      .dashboard-header .url-highlight {
+        color: #ffc107;
+        font-weight: 600;
+      }
+
+      .card-title {
+        font-weight: 600;
+      }
+
+      .scroll-box {
+        max-height: 40vh;
+        overflow-y: auto;
+      }
+
+      .scroll-box::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .scroll-box::-webkit-scrollbar-thumb {
+        background-color: #ccc;
+        border-radius: 4px;
+      }
+
+      .list-group {
+        margin-bottom: 0;
+      }
+
+      .home-btn {
+        position: absolute;
+        right: 30px;
+        top: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container py-4 position-relative">
+      <a href="/" class="btn btn-outline-light home-btn">🏠 Home</a>
+      <div class="dashboard-header">
+        <h2>Web Page Analysis Dashboard</h2>
+        <p class="mb-1 small">
+          Target URL: <span class="url-highlight" id="page-url"></span>
+        </p>
+        <p class="mb-0 small">
+          <strong>Analysis Time:</strong> <span id="analysis-time"></span>
+        </p>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-md-4">
+          <div class="card h-100 shadow">
+            <div class="card-body">
+              <h5 class="card-title">Summary</h5>
+              <p>
+                <strong>HTML Version:</strong> <span id="html-version"></span>
+              </p>
+              <p><strong>Title:</strong> <span id="page-title"></span></p>
+              <p>
+                <strong>Login Form:</strong>
+                <span id="login-form-status"></span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card h-100 shadow">
+            <div class="card-body">
+              <h5 class="card-title">Heading Counts</h5>
+              <ul id="heading-counts" class="list-group"></ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card h-100 shadow">
+            <div class="card-body">
+              <h5 class="card-title">All Headings</h5>
+              <div class="scroll-box">
+                <ul id="all-headings" class="list-group"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4 mt-1">
+        <div class="col-md-6">
+          <div class="card shadow">
+            <div class="card-body">
+              <h5 class="card-title">Internal Links</h5>
+              <div class="scroll-box">
+                <ul id="internal-links" class="list-group"></ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-4 shadow">
+            <div class="card-body">
+              <h5 class="card-title">External Links</h5>
+              <div class="scroll-box">
+                <ul id="external-links" class="list-group"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="card shadow">
+            <div class="card-body">
+              <h5 class="card-title">Accessible Links ✅</h5>
+              <div class="scroll-box">
+                <ul id="accessible-links" class="list-group"></ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-4 shadow">
+            <div class="card-body">
+              <h5 class="card-title">Inaccessible Links ❌</h5>
+              <div class="scroll-box">
+                <ul id="inaccessible-links" class="list-group"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const raw = localStorage.getItem('analysisResult');
+        if (!raw) {
+          document.body.innerHTML =
+            '<div class="container mt-5"><div class="alert alert-danger">No result found. Please go back and analyze a URL first.</div></div>';
+          return;
+        }
+
+        const data = JSON.parse(raw);
+
+        document.getElementById('page-url').textContent = data.PageURL;
+        const ns = data.AnalysisDuration;
+        const ms = ns / 1e6;
+        const seconds = (ms / 1000).toFixed(2);
+        document.getElementById(
+          'analysis-time',
+        ).textContent = `${seconds} seconds`;
+        document.getElementById('html-version').textContent = data.HTMLVersion;
+        document.getElementById('page-title').textContent = data.Title;
+        document.getElementById('login-form-status').textContent =
+          data.HasLoginForm ? '✅ Present' : '❌ Not Found';
+
+        const hc = document.getElementById('heading-counts');
+        for (const tag in data.HeadingsCount) {
+          const li = document.createElement('li');
+          li.className = 'list-group-item d-flex justify-content-between';
+          li.innerHTML = `<strong>${tag.toUpperCase()}</strong><span>${
+            data.HeadingsCount[tag]
+          }</span>`;
+          hc.appendChild(li);
+        }
+
+        const appendList = (id, items, isLink = false, successClass = '') => {
+          const ul = document.getElementById(id);
+          ul.innerHTML = '';
+          items.forEach((item) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item ' + successClass;
+            li.innerHTML = isLink
+              ? `<a href="${item.URL}" target="_blank">${item.Label}</a>`
+              : `<strong>${item.Tag.toUpperCase()}:</strong> ${item.Title}`;
+            ul.appendChild(li);
+          });
+        };
+
+        appendList('all-headings', data.Headings);
+        appendList('internal-links', data.InternalLinks, true);
+        appendList('external-links', data.ExternalLinks, true);
+        appendList(
+          'accessible-links',
+          data.AccessibleLinks,
+          true,
+          'text-success',
+        );
+        appendList(
+          'inaccessible-links',
+          data.InaccessibleLinks,
+          true,
+          'text-danger',
+        );
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

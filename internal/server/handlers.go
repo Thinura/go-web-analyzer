@@ -2,25 +2,21 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"net/http"
-	"strings"
 	"time"
 	"web-analyzer/internal/analyzer"
 )
 
 var (
-	formTmpl   = template.Must(template.ParseFiles("internal/server/templates/form.html"))
-	resultTmpl = template.Must(template.New("result.html").
-			Funcs(template.FuncMap{
-			"upper": strings.ToUpper,
-			"formatDuration": func(d time.Duration) string {
-				return fmt.Sprintf("%.2f seconds", d.Seconds())
-			},
-		}).
-		ParseFiles("internal/server/templates/result.html"))
+	formTmpl   *template.Template
+	resultTmpl *template.Template
 )
+
+func SetTemplates(form, result *template.Template) {
+	formTmpl = form
+	resultTmpl = result
+}
 
 // ShowForm serves the input form.
 func ShowForm(w http.ResponseWriter, r *http.Request) {
@@ -30,43 +26,6 @@ func ShowForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := formTmpl.Execute(w, nil); err != nil {
 		http.Error(w, "Failed to render form: "+err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// HandleAnalyze processes the form and shows results.
-func HandleAnalyze(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	pageURL := r.FormValue("url")
-	if pageURL == "" {
-		http.Error(w, "URL is required", http.StatusBadRequest)
-		return
-	}
-
-	result, err := analyzer.AnalyzePage(pageURL)
-	if err != nil {
-		http.Error(w, "Failed to analyze: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Configure concurrent link checking
-	config := analyzer.LinkCheckerConfig{
-		MaxConcurrency: 10,
-		Timeout:        5 * time.Second,
-		Logger:         func(format string, args ...interface{}) {},
-	}
-
-	// Merge internal and external links into one slice of NamedLink
-	allLinks := make([]analyzer.NamedLink, 0, len(result.InternalLinks)+len(result.ExternalLinks))
-	allLinks = append(allLinks, result.InternalLinks...)
-	allLinks = append(allLinks, result.ExternalLinks...)
-
-	result.AccessibleLinks, result.InaccessibleLinks = analyzer.ClassifyLinksConcurrently(allLinks, config)
-
-	if err := resultTmpl.Execute(w, result); err != nil {
-		http.Error(w, "Failed to render result: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 

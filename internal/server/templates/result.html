@@ -103,7 +103,7 @@
         <div class="col-md-4">
           <div class="card h-100 shadow">
             <div class="card-body">
-              <h5 class="card-title">All Headings</h5>
+              <h5 class="card-title">All Headings (<span id="total-heading-count">0</span>)</h5>
               <div class="scroll-box">
                 <ul id="all-headings" class="list-group"></ul>
               </div>
@@ -116,7 +116,7 @@
         <div class="col-md-6">
           <div class="card shadow">
             <div class="card-body">
-              <h5 class="card-title">Internal Links</h5>
+              <h5 class="card-title">Internal Links (<span id="total-internal-link-count">0</span>)</h5>
               <div class="scroll-box">
                 <ul id="internal-links" class="list-group"></ul>
               </div>
@@ -125,7 +125,7 @@
 
           <div class="card mt-4 shadow">
             <div class="card-body">
-              <h5 class="card-title">External Links</h5>
+              <h5 class="card-title">External Links (<span id="total-external-link-count">0</span>)</h5>
               <div class="scroll-box">
                 <ul id="external-links" class="list-group"></ul>
               </div>
@@ -136,7 +136,7 @@
         <div class="col-md-6">
           <div class="card shadow">
             <div class="card-body">
-              <h5 class="card-title">Accessible Links ✅</h5>
+              <h5 class="card-title">Accessible Links ✅ (<span id="total-accessible-link-count">0</span>)</h5>
               <div class="scroll-box">
                 <ul id="accessible-links" class="list-group"></ul>
               </div>
@@ -145,7 +145,7 @@
 
           <div class="card mt-4 shadow">
             <div class="card-body">
-              <h5 class="card-title">Inaccessible Links ❌</h5>
+              <h5 class="card-title">Inaccessible Links ❌ (<span id="total-inaccessible-link-count">0</span>)</h5>
               <div class="scroll-box">
                 <ul id="inaccessible-links" class="list-group"></ul>
               </div>
@@ -178,15 +178,42 @@
         document.getElementById('login-form-status').textContent =
           data.HasLoginForm ? '✅ Present' : '❌ Not Found';
 
+        // Group headings by tag and title and count them
+        const headingMap = new Map();
+        data.Headings.forEach(h => {
+          const tag = h.Tag || 'unknown';
+          const title = h.Title && h.Title.trim() !== '' ? h.Title : 'empty';
+          const key = `${tag}|${title}`;
+          if (!headingMap.has(key)) {
+            headingMap.set(key, { Tag: tag, Title: title, Count: 1 });
+          } else {
+            headingMap.get(key).Count += 1;
+          }
+        });
+
         const hc = document.getElementById('heading-counts');
-        for (const tag in data.HeadingsCount) {
+        const tagSummary = {};
+        headingMap.forEach(({ Tag, Count }) => {
+          tagSummary[Tag] = (tagSummary[Tag] || 0) + Count;
+        });
+        for (const tag in tagSummary) {
           const li = document.createElement('li');
           li.className = 'list-group-item d-flex justify-content-between';
-          li.innerHTML = `<strong>${tag.toUpperCase()}</strong><span>${
-            data.HeadingsCount[tag]
-          }</span>`;
+          li.innerHTML = `<strong>${tag.toUpperCase()}</strong><span>${tagSummary[tag]}</span>`;
           hc.appendChild(li);
         }
+
+
+        // Render grouped headings
+        const headingsList = document.getElementById('all-headings');
+        headingsList.innerHTML = '';
+        headingMap.forEach(({ Tag, Title, Count }) => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item';
+          li.innerHTML = `<strong>${Tag.toUpperCase()}:</strong> ${Title} <span class="badge bg-secondary ms-2">${Count}</span>`;
+          headingsList.appendChild(li);
+        });
+        document.getElementById('total-heading-count').textContent = headingMap.size;
 
         const appendList = (id, items, isLink = false, successClass = '') => {
           const ul = document.getElementById(id);
@@ -195,27 +222,32 @@
             const li = document.createElement('li');
             li.className = 'list-group-item ' + successClass;
             li.innerHTML = isLink
-              ? `<a href="${item.URL}" target="_blank">${item.Label}</a>`
-              : `<strong>${item.Tag.toUpperCase()}:</strong> ${item.Title}`;
+              ? `<a href="${item.URL}" target="_blank">${item.Label || item.URL}</a> <span class="badge bg-secondary ms-2">${item.Occurrence || 1}</span>`
+              : `<strong>${item.Tag.toUpperCase()}:</strong> ${item.Title} <span class="badge bg-secondary ms-2">${item.Count || 1}</span>`;
             ul.appendChild(li);
           });
         };
 
-        appendList('all-headings', data.Headings);
         appendList('internal-links', data.InternalLinks, true);
+        document.getElementById('total-internal-link-count').textContent = data.InternalLinks.length;
         appendList('external-links', data.ExternalLinks, true);
+        document.getElementById('total-external-link-count').textContent = data.ExternalLinks.length;
         appendList(
           'accessible-links',
           data.AccessibleLinks,
           true,
           'text-success',
         );
+        document.getElementById('total-accessible-link-count').textContent =
+          data.AccessibleLinks.length;
         appendList(
           'inaccessible-links',
           data.InaccessibleLinks,
           true,
           'text-danger',
         );
+        document.getElementById('total-inaccessible-link-count').textContent =
+          data.InaccessibleLinks.length;
       });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

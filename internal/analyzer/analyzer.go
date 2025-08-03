@@ -16,8 +16,9 @@ import (
 )
 
 type NamedLink struct {
-	URL   string
-	Label string
+	URL        string
+	Label      string
+	Occurrence int
 }
 
 type Heading struct {
@@ -25,12 +26,20 @@ type Heading struct {
 	Title string
 }
 
+type HTTPError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *HTTPError) Error() string {
+	return e.Message
+}
+
 type Result struct {
 	PageURL           string
 	HTMLVersion       string
 	Title             string
 	Headings          []Heading
-	HeadingsCount     map[string]int
 	InternalLinks     []NamedLink
 	ExternalLinks     []NamedLink
 	AccessibleLinks   []NamedLink
@@ -53,55 +62,40 @@ func stripPort(hostport string) string {
 	return host
 }
 
-func deduplicateLinks(links []string) []NamedLink {
-	seen := make(map[string]int)
-	var named []NamedLink
-	for _, link := range links {
-		seen[link]++
-		label := link
-		if seen[link] > 1 {
-			label = fmt.Sprintf("%s (duplicate %d)", link, seen[link])
-		}
-		named = append(named, NamedLink{URL: link, Label: label})
-	}
-	return named
-}
-
 // AnalyzePage analyzes the given URL.
 func AnalyzePage(pageURL string) (*Result, error) {
 	start := time.Now()
 	parsedURL, err := url.ParseRequestURI(pageURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid URL: %v", err)
+		return nil, &HTTPError{StatusCode: http.StatusBadRequest, Message: fmt.Sprintf("invalid URL: %v", err)}
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(pageURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch: %v", err)
+		return nil, &HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to fetch: %v", err)}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP error: %d %s", resp.StatusCode, resp.Status)
+		return nil, &HTTPError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("HTTP error: %d %s", resp.StatusCode, resp.Status)}
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
+		return nil, &HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to read response body: %v", err)}
 	}
 
 	htmlVersion := detectHTMLVersion(data)
 
 	doc, err := html.Parse(strings.NewReader(string(data)))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %v", err)
+		return nil, &HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to parse HTML: %v", err)}
 	}
 
 	result := &Result{
-		PageURL:       pageURL,
-		HeadingsCount: make(map[string]int),
-		HTMLVersion:   htmlVersion,
+		PageURL:     pageURL,
+		HTMLVersion: htmlVersion,
 	}
 
 	extractInfo(doc, parsedURL, result)
@@ -171,10 +165,10 @@ func extractInfo(n *html.Node, baseURL *url.URL, result *Result) {
 
 	cfg, err := LoadTagConfig("config/config.json")
 	if err != nil {
-		log.Println("Failed to load config:", err)
-	} else {
-		log.Println("Loaded headings config:", cfg.Headings)
+		log.Printf("Failed to load config: %v", err)
+		panic(&HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("Failed to load config: %v", err)})
 	}
+	log.Println("Loaded headings config:", cfg.Headings)
 
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
@@ -212,7 +206,6 @@ func extractInfo(n *html.Node, baseURL *url.URL, result *Result) {
 				}
 			default:
 				if contains(cfg.Headings, n.Data) {
-					result.HeadingsCount[n.Data]++
 					result.Headings = append(result.Headings, Heading{
 						Tag:   n.Data,
 						Title: strings.TrimSpace(getTextContent(n)),
@@ -228,38 +221,8 @@ func extractInfo(n *html.Node, baseURL *url.URL, result *Result) {
 	}
 	walk(n)
 
-	result.InternalLinks = deduplicateLinks(rawInternal)
-	result.ExternalLinks = deduplicateLinks(rawExternal)
-}
-
-func checkLinksConcurrently(links []string, config LinkCheckerConfig) int {
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, config.MaxConcurrency)
-	bad := make(chan bool, len(links))
-
-	for _, link := range links {
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			if !isLinkAccessible(url, config.Timeout, config.Logger) {
-				bad <- true
-			}
-		}(link)
-	}
-
-	wg.Wait()
-	close(bad)
-
-	count := 0
-	for b := range bad {
-		if b {
-			count++
-		}
-	}
-	return count
+	result.InternalLinks = ToNamedLinks(rawInternal)
+	result.ExternalLinks = ToNamedLinks(rawExternal)
 }
 
 func isLinkAccessible(link string, timeout time.Duration, logger func(string, ...interface{})) bool {
@@ -289,19 +252,7 @@ func ClassifyLinksConcurrently(links []NamedLink, config LinkCheckerConfig) (acc
 	sem := make(chan struct{}, config.MaxConcurrency)
 	mu := sync.Mutex{}
 
-	// Track duplicates
-	nameCount := make(map[string]int)
-	uniqueLinks := make([]NamedLink, len(links))
-	for i, l := range links {
-		nameCount[l.Label]++
-		count := nameCount[l.Label]
-		if count > 1 {
-			l.Label = fmt.Sprintf("%s (duplicate %d)", l.Label, count)
-		}
-		uniqueLinks[i] = l
-	}
-
-	for _, link := range uniqueLinks {
+	for _, link := range links {
 		wg.Add(1)
 		go func(link NamedLink) {
 			defer wg.Done()
@@ -322,4 +273,44 @@ func ClassifyLinksConcurrently(links []NamedLink, config LinkCheckerConfig) (acc
 
 	wg.Wait()
 	return
+}
+
+func ToNamedLinks(links []string) []NamedLink {
+	countMap := make(map[string]int)
+
+	for _, link := range links {
+		countMap[link]++
+	}
+
+	named := make([]NamedLink, 0, len(countMap))
+	for url, count := range countMap {
+		named = append(named, NamedLink{
+			URL:        url,
+			Label:      url,
+			Occurrence: count,
+		})
+	}
+
+	return named
+}
+
+func RelabelDuplicates(links []NamedLink) []NamedLink {
+	seen := make(map[string]int)
+
+	// Count occurrences
+	for _, l := range links {
+		seen[l.URL]++
+	}
+
+	// Create final labeled slice
+	var labeled []NamedLink
+	for url, count := range seen {
+		label := url
+		if count > 1 {
+			label = fmt.Sprintf("%s (%d)", url, count)
+		}
+		labeled = append(labeled, NamedLink{URL: url, Label: label})
+	}
+
+	return labeled
 }

@@ -1,8 +1,7 @@
-// analyzer_test.go contains tests for AnalyzePage() and full-page analysis logic.
-// Helpers are defined in helper_test.go for reuse across this package.
 package analyzer
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +17,6 @@ func init() {
 
 func TestAnalyzePage_BasicPage(t *testing.T) {
 	server := newTestServer(basicTestHTML)
-
 	defer server.Close()
 
 	result, err := AnalyzePage(server.URL)
@@ -29,8 +27,6 @@ func TestAnalyzePage_BasicPage(t *testing.T) {
 	assertEqual(t, "Title", result.Title, "Test Page")
 	assertNamedLinksCount(t, "InternalLinks", result.InternalLinks, 1)
 	assertNamedLinksCount(t, "ExternalLinks", result.ExternalLinks, 1)
-	assertEqual(t, "HeadingsCount[h1]", result.HeadingsCount["h1"], 1)
-	assertEqual(t, "HeadingsCount[h2]", result.HeadingsCount["h2"], 1)
 	assertEqual(t, "HasLoginForm", result.HasLoginForm, true)
 }
 
@@ -117,7 +113,6 @@ func TestAnalyzePage_CustomHeadingTags(t *testing.T) {
 	ts := newTestServer(html)
 	defer ts.Close()
 
-	// Temporarily override LoadTagConfig
 	orig := LoadTagConfig
 	LoadTagConfig = func(path string) (*TagConfig, error) {
 		return &TagConfig{Headings: []string{"custom-heading"}}, nil
@@ -135,7 +130,7 @@ func TestAnalyzePage_CustomHeadingTags(t *testing.T) {
 }
 
 func TestAnalyzePage_LinkClassification(t *testing.T) {
-	html := `<a href="/internal">Internal</a><a href="http://external.com">External</a>`
+	html := `<a href="/internal">Internal</a><a href="http://external.com">External</a><a href="::bad">Bad</a><a href="">Empty</a>`
 	ts := newTestServer(html)
 	defer ts.Close()
 
@@ -164,19 +159,6 @@ func TestAnalyzePage_LoginFormDetection(t *testing.T) {
 	}
 }
 
-func TestDeduplicateLinks(t *testing.T) {
-	links := []string{"http://a.com", "http://a.com", "http://b.com"}
-	deduped := deduplicateLinks(links)
-
-	if len(deduped) != 3 {
-		t.Errorf("Expected 3 labeled links, got %d", len(deduped))
-	}
-
-	if deduped[1].Label != "http://a.com (duplicate 2)" {
-		t.Errorf("Expected duplicate label, got %s", deduped[1].Label)
-	}
-}
-
 func TestDetectHTMLVersion(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -192,5 +174,124 @@ func TestDetectHTMLVersion(t *testing.T) {
 		if version != tt.expected {
 			t.Errorf("Expected %s, got %s", tt.expected, version)
 		}
+	}
+}
+
+func TestToNamedLinks(t *testing.T) {
+	links := []string{"http://a.com", "http://a.com", "http://b.com"}
+	named := ToNamedLinks(links)
+
+	if len(named) != 2 {
+		t.Errorf("Expected 2 unique links, got %d", len(named))
+	}
+
+	for _, nl := range named {
+		if nl.URL == "http://a.com" && nl.Occurrence != 2 {
+			t.Errorf("Expected occurrence 2 for http://a.com, got %d", nl.Occurrence)
+		}
+		if nl.URL == "http://b.com" && nl.Occurrence != 1 {
+			t.Errorf("Expected occurrence 1 for http://b.com, got %d", nl.Occurrence)
+		}
+	}
+}
+
+func TestRelabelDuplicates(t *testing.T) {
+	links := []NamedLink{
+		{URL: "http://a.com"},
+		{URL: "http://a.com"},
+		{URL: "http://b.com"},
+	}
+	labeled := RelabelDuplicates(links)
+
+	expected := map[string]string{
+		"http://a.com": "http://a.com (2)",
+		"http://b.com": "http://b.com",
+	}
+
+	for _, l := range labeled {
+		if l.Label != expected[l.URL] {
+			t.Errorf("For URL %s, expected label %s, got %s", l.URL, expected[l.URL], l.Label)
+		}
+	}
+}
+
+func TestHTTPError_Error(t *testing.T) {
+	err := &HTTPError{StatusCode: 404, Message: "Not Found"}
+	if err.Error() != "Not Found" {
+		t.Errorf("Expected 'Not Found', got '%s'", err.Error())
+	}
+}
+
+func TestAnalyzePage_ReadBodyError(t *testing.T) {
+	// Simulate a broken response body
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("server does not support hijacking")
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Fatalf("Hijack failed: %v", err)
+		}
+		conn.Close()
+	}))
+	defer ts.Close()
+	_, err := AnalyzePage(ts.URL)
+	if err == nil || !strings.Contains(err.Error(), "failed to fetch") {
+		t.Errorf("Expected read body error, got: %v", err)
+	}
+}
+
+func TestIsLinkAccessible_RequestCreationFails(t *testing.T) {
+	var logged string
+	logger := func(format string, args ...interface{}) {
+		logged = fmt.Sprintf(format, args...)
+	}
+
+	// Invalid URL format that causes http.NewRequest to fail
+	result := isLinkAccessible("http://[::1]:namedport", 2*time.Second, logger)
+	if result != false {
+		t.Errorf("Expected false, got %v", result)
+	}
+	if !strings.Contains(logged, "HEAD request creation failed") {
+		t.Errorf("Expected log message for request creation failure, got: %s", logged)
+	}
+}
+
+func TestAnalyzePage_ConfigLoadFailure(t *testing.T) {
+	original := LoadTagConfig
+	LoadTagConfig = func(path string) (*TagConfig, error) {
+		return nil, fmt.Errorf("simulated config load failure")
+	}
+	defer func() { LoadTagConfig = original }()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected panic due to config load failure, but did not panic")
+		} else {
+			if httpErr, ok := r.(*HTTPError); !ok || !strings.Contains(httpErr.Message, "Failed to load config") {
+				t.Errorf("Expected HTTPError with config message, got: %v", r)
+			}
+		}
+	}()
+
+	server := newTestServer("<html><body></body></html>")
+	defer server.Close()
+	AnalyzePage(server.URL)
+}
+
+func TestIsLinkAccessible_RequestFails(t *testing.T) {
+	var logged string
+	logger := func(format string, args ...interface{}) {
+		logged = fmt.Sprintf(format, args...)
+	}
+
+	// Use a non-routable IP to simulate a network error
+	result := isLinkAccessible("http://10.255.255.1", 1*time.Second, logger)
+	if result != false {
+		t.Errorf("Expected false, got %v", result)
+	}
+	if !strings.Contains(logged, "HEAD request failed") {
+		t.Errorf("Expected log message for request failure, got: %s", logged)
 	}
 }

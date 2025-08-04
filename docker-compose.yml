@@ -1,0 +1,20 @@
+services:
+  render-server:
+    build:
+      context: ./puppeteer-render-server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+
+  web-analyzer:
+    build:
+      context: ./web-analyzer
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - render-server
+    environment:
+      - RENDER_SERVER_URL=http://render-server:3001

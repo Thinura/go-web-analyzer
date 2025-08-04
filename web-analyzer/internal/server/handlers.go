@@ -79,7 +79,11 @@ func HandleAnalyzeJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func ShowResultPage(w http.ResponseWriter, r *http.Request) {
-	// Serve the result.html template shell
-	tmpl := template.Must(template.ParseFiles("internal/server/templates/result.html"))
-	tmpl.Execute(w, nil)
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := resultTmpl.Execute(w, nil); err != nil {
+		http.Error(w, "Failed to render result: "+err.Error(), http.StatusInternalServerError)
+	}
 }

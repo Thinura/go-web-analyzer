@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"web-analyzer/pkg/errors"
+
 	"golang.org/x/net/html"
 )
 
@@ -24,15 +26,6 @@ type NamedLink struct {
 type Heading struct {
 	Tag   string
 	Title string
-}
-
-type HTTPError struct {
-	StatusCode int
-	Message    string
-}
-
-func (e *HTTPError) Error() string {
-	return e.Message
 }
 
 type Result struct {
@@ -67,30 +60,30 @@ func AnalyzePage(pageURL string) (*Result, error) {
 	start := time.Now()
 	parsedURL, err := url.ParseRequestURI(pageURL)
 	if err != nil {
-		return nil, &HTTPError{StatusCode: http.StatusBadRequest, Message: fmt.Sprintf("invalid URL: %v", err)}
+		return nil, &errors.HTTPError{StatusCode: http.StatusBadRequest, Message: fmt.Sprintf("invalid URL: %v", err)}
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(pageURL)
 	if err != nil {
-		return nil, &HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to fetch: %v", err)}
+		return nil, &errors.HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to fetch: %v", err)}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, &HTTPError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("HTTP error: %d %s", resp.StatusCode, resp.Status)}
+		return nil, &errors.HTTPError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("HTTP error: %d %s", resp.StatusCode, resp.Status)}
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, &HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to read response body: %v", err)}
+		return nil, &errors.HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to read response body: %v", err)}
 	}
 
 	htmlVersion := detectHTMLVersion(data)
 
 	doc, err := html.Parse(strings.NewReader(string(data)))
 	if err != nil {
-		return nil, &HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to parse HTML: %v", err)}
+		return nil, &errors.HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to parse HTML: %v", err)}
 	}
 
 	result := &Result{
@@ -163,10 +156,10 @@ func extractInfo(n *html.Node, baseURL *url.URL, result *Result) {
 	var rawExternal []string
 	var allLinks []string
 
-	cfg, err := LoadTagConfig("config/config.json")
+	cfg, err := LoadTagConfig()
 	if err != nil {
 		log.Printf("Failed to load config: %v", err)
-		panic(&HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("Failed to load config: %v", err)})
+		panic(&errors.HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("Failed to load config: %v", err)})
 	}
 	log.Println("Loaded headings config:", cfg.Headings)
 

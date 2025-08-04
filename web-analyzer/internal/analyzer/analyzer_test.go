@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"web-analyzer/pkg/errors"
 )
 
 func init() {
-	LoadTagConfig = func(path string) (*TagConfig, error) {
+	LoadTagConfig = func() (*TagConfig, error) {
 		return &TagConfig{Headings: []string{"h1", "h2", "h3"}}, nil
 	}
 }
@@ -114,7 +115,7 @@ func TestAnalyzePage_CustomHeadingTags(t *testing.T) {
 	defer ts.Close()
 
 	orig := LoadTagConfig
-	LoadTagConfig = func(path string) (*TagConfig, error) {
+	LoadTagConfig = func() (*TagConfig, error) {
 		return &TagConfig{Headings: []string{"custom-heading"}}, nil
 	}
 	defer func() { LoadTagConfig = orig }()
@@ -216,7 +217,7 @@ func TestRelabelDuplicates(t *testing.T) {
 }
 
 func TestHTTPError_Error(t *testing.T) {
-	err := &HTTPError{StatusCode: 404, Message: "Not Found"}
+	err := &errors.HTTPError{StatusCode: 404, Message: "Not Found"}
 	if err.Error() != "Not Found" {
 		t.Errorf("Expected 'Not Found', got '%s'", err.Error())
 	}
@@ -260,7 +261,7 @@ func TestIsLinkAccessible_RequestCreationFails(t *testing.T) {
 
 func TestAnalyzePage_ConfigLoadFailure(t *testing.T) {
 	original := LoadTagConfig
-	LoadTagConfig = func(path string) (*TagConfig, error) {
+	LoadTagConfig = func() (*TagConfig, error) {
 		return nil, fmt.Errorf("simulated config load failure")
 	}
 	defer func() { LoadTagConfig = original }()
@@ -269,7 +270,7 @@ func TestAnalyzePage_ConfigLoadFailure(t *testing.T) {
 		if r := recover(); r == nil {
 			t.Error("Expected panic due to config load failure, but did not panic")
 		} else {
-			if httpErr, ok := r.(*HTTPError); !ok || !strings.Contains(httpErr.Message, "Failed to load config") {
+			if httpErr, ok := r.(*errors.HTTPError); !ok || !strings.Contains(httpErr.Message, "Failed to load config") {
 				t.Errorf("Expected HTTPError with config message, got: %v", r)
 			}
 		}

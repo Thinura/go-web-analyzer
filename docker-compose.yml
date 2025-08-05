@@ -1,5 +1,6 @@
 services:
   render-server:
+    platform: linux/amd64
     build:
       context: ./puppeteer-render-server
       dockerfile: Dockerfile

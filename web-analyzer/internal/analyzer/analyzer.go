@@ -55,48 +55,6 @@ func stripPort(hostport string) string {
 	return host
 }
 
-// AnalyzePage analyzes the given URL.
-// func AnalyzePage(pageURL string) (*Result, error) {
-// 	start := time.Now()
-// 	parsedURL, err := url.ParseRequestURI(pageURL)
-// 	if err != nil {
-// 		return nil, &errors.HTTPError{StatusCode: http.StatusBadRequest, Message: fmt.Sprintf("invalid URL: %v", err)}
-// 	}
-
-// 	client := &http.Client{Timeout: 10 * time.Second}
-// 	resp, err := client.Get(pageURL)
-// 	if err != nil {
-// 		return nil, &errors.HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to fetch: %v", err)}
-// 	}
-// 	defer resp.Body.Close()
-
-// 	if resp.StatusCode != http.StatusOK {
-// 		return nil, &errors.HTTPError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("HTTP error: %d %s", resp.StatusCode, resp.Status)}
-// 	}
-
-// 	data, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		return nil, &errors.HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to read response body: %v", err)}
-// 	}
-
-// 	htmlVersion := detectHTMLVersion(data)
-
-// 	doc, err := html.Parse(strings.NewReader(string(data)))
-// 	if err != nil {
-// 		return nil, &errors.HTTPError{StatusCode: http.StatusInternalServerError, Message: fmt.Sprintf("failed to parse HTML: %v", err)}
-// 	}
-
-// 	result := &Result{
-// 		PageURL:     pageURL,
-// 		HTMLVersion: htmlVersion,
-// 	}
-
-// 	extractInfo(doc, parsedURL, result)
-
-// 	result.AnalysisDuration = time.Since(start)
-// 	return result, nil
-// }
-
 func AnalyzePage(pageURL string) (*Result, error) {
 	start := time.Now()
 	parsedURL, err := url.ParseRequestURI(pageURL)

@@ -17,22 +17,46 @@ Designed for developers, testers, SEO professionals, and curious minds.
 - ✅ Measure analysis time
 - ✅ JSON API endpoint for integration
 - ✅ Beautiful Bootstrap UI dashboard
-- ✅ Rate-limiting and middleware support
-- ✅ Fully tested with 90%+ coverage
+- ✅ Render JS-heavy pages using Puppeteer
+- ✅ Rate-limiting and middleware
+- ✅ 90%+ test coverage
 
 ---
 
 ## 🏗️ Project Structure
 
 .
-├── internal/analyzer/   # Core analysis logic
-├── cmd/server/          # HTTP server entry point
-├── config/              # Config for tag extraction
-├── templates/           # HTML templates for UI
-├── static/              # Static assets (JS, CSS, etc.)
-├── Dockerfile           # Docker container instructions
-├── Makefile             # Dev and CI tasks
-└── go.mod / go.sum      # Module dependencies
+web-analyzer/
+├── cmd/
+│   └── webanalyzer/            # Entry point (main.go)
+├── internal/
+│   ├── analyzer/               # Core logic (analysis, config, fetchers)
+│   ├── constants/              # Constants shared within internal
+│   ├── helpers/                # Utility fetchers (TryStandard, etc.)
+│   └── server/                 # Handlers and middleware
+├── pkg/
+│   ├── configloader/           # External config reading logic
+│   ├── domrenderer/            # Puppeteer integration
+│   ├── embed/                  # go:embed usage
+│   │   ├── config/
+│   │   │   └── config.json     # JSON config for custom tags
+│   │   └── templates/          # HTML templates
+│   └── errors/                 # Custom HTTP error types
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile
+├── go.mod / go.sum
+
+---
+
+## 🔧 Running Locally
+
+```bash
+ cd web-analyzer
+ go run ./cmd/webanalyzer 
+```
+
+Visit: http://localhost:8080
 
 ---
 
@@ -41,39 +65,23 @@ Designed for developers, testers, SEO professionals, and curious minds.
 Run tests and generate coverage:
 
 ```bash
- make test
- make cover
-```
-⸻
-
-🔧 Running Locally
-
-Start the application:
-
-```bash
-go run ./cmd/server
+ cd web-analyzer
+ go test -coverprofile=coverage.out -count=1 ./...
 ```
 
-Visit: http://localhost:8080
+---
 
-⸻
-
-🐳 Docker Usage
+## 🐳 Docker Usage
 
 Build and run with Docker:
 
-docker build -t webanalyzer .
-docker run -p 8080:8080 webanalyzer
+```bash
+docker-compose up --build
+```
 
-Or use Make:
+---
 
-make docker
-make run-docker
-
-
-⸻
-
-🔌 API Usage
+## 🔌 API Usage
 
 Send a POST request to analyze a page:
 
@@ -106,22 +114,25 @@ Response:
 
 ⚙️ Configuration
 
-Customize heading tags in config/config.json:
+Customize heading tags in pkg/embed/config/config.json:
 
 ```bash
 {
-  "headings": ["article", "section", "summary"]
+  "headings": ["h1", "h2", "h3"]
 }
 ```
 
 ⸻
 
 🧰 Developer Tools
-	•	Go 1.22+
-	•	Bootstrap 5
-	•	golang.org/x/net/html
-	•	Custom rate-limiting middleware
-	•	Test coverage: 90%+
+- Go 1.22+
+- Bootstrap 5
+- Puppeteer / Playwright
+- golang.org/x/net/html
+- Docker + Compose
+- Custom middleware & rate limiter
+- go:embed for HTML/config embedding
+- Test Coverage: 75%+ 
 
 ⸻
 

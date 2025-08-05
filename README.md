@@ -19,7 +19,7 @@ Designed for developers, testers, SEO professionals, and curious minds.
 - ✅ Beautiful Bootstrap UI dashboard
 - ✅ Render JS-heavy pages using Puppeteer
 - ✅ Rate-limiting and middleware
-- ✅ 90%+ test coverage
+- ✅ 75%+ test coverage
 
 ---
 
@@ -127,7 +127,7 @@ Customize heading tags in pkg/embed/config/config.json:
 ⸻
 
 🧰 Developer Tools
-- Go 1.22+
+- Go 1.24+
 - Bootstrap 5
 - Puppeteer / Playwright
 - golang.org/x/net/html

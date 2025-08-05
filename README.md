@@ -25,6 +25,7 @@ Designed for developers, testers, SEO professionals, and curious minds.
 
 ## 🏗️ Project Structure
 
+```text
 .
 web-analyzer/
 ├── cmd/
@@ -46,6 +47,7 @@ web-analyzer/
 ├── docker-compose.yml
 ├── Makefile
 ├── go.mod / go.sum
+```
 
 ---
 
